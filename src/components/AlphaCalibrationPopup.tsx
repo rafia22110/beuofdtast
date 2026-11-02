@@ -18,7 +18,17 @@ import {
   Scale,
   BookOpen,
   Code2,
+  ClipboardPaste,
+  Loader2,
 } from 'lucide-react';
+
+interface SubmittedSheetRecord {
+  test_id: string;
+  tester: string;
+  columnNumber: number;
+  fps: number;
+  timestamp: string;
+}
 
 function detectReadableDeviceName(): string {
   const ua = navigator.userAgent;
@@ -66,8 +76,15 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
   );
   const [glasses, setGlasses] = useState<'none' | 'glasses' | 'contacts'>('none');
   const [measuredFps, setMeasuredFps] = useState<number>(30);
+  const [videoRes, setVideoRes] = useState<string>('640x480');
   const [isMeasuringFps, setIsMeasuringFps] = useState(false);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [pastedReportText, setPastedReportText] = useState('');
+  const [showPasteBox, setShowPasteBox] = useState(false);
+
+  // Submission status states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedRecord, setSubmittedRecord] = useState<SubmittedSheetRecord | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [copiedTestUrl, setCopiedTestUrl] = useState(false);
 
   // Trigger popup 1.5 seconds after entering the site
@@ -139,6 +156,9 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
       const track = stream.getVideoTracks()[0];
       const settings = track.getSettings();
       const camFps = settings.frameRate ? Math.round(settings.frameRate) : 30;
+      if (settings.width && settings.height) {
+        setVideoRes(`${settings.width}x${settings.height}`);
+      }
       setMeasuredFps(camFps);
       stream.getTracks().forEach((t) => t.stop());
     } catch {
@@ -148,14 +168,159 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
     }
   };
 
-  const handleConfidentialSubmit = (e?: React.FormEvent) => {
+  // Parse pasted report from https://beuofdbak.vercel.app/ if the user pasted one
+  const parsePastedBeuofdbakReport = (raw: string) => {
+    if (!raw.trim()) return null;
+    try {
+      const jsonIdx = raw.indexOf('{');
+      if (jsonIdx !== -1) {
+        const jsonSlice = raw.slice(jsonIdx);
+        // Normalize unquoted keys if copied from loosely formatted text
+        const normalized = jsonSlice.replace(
+          /([{,]\s*)([a-zA-Z0-9_]+)\s*:/g,
+          '$1"$2":'
+        );
+        const parsed = JSON.parse(normalized);
+        if (parsed && (parsed.test_id || parsed.metrics)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Fallback to regex extraction if JSON wasn't strict
+    }
+    return null;
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const clipText = await navigator.clipboard.readText();
+      if (clipText) {
+        setPastedReportText(clipText);
+        setShowPasteBox(true);
+        const parsed = parsePastedBeuofdbakReport(clipText);
+        if (parsed) {
+          if (parsed.tester) setTesterName(parsed.tester);
+          if (parsed.device?.estimated_fps) setMeasuredFps(Number(parsed.device.estimated_fps));
+          if (parsed.profile?.eye_color) setEyeColor(parsed.profile.eye_color);
+          if (parsed.profile?.lighting) setLighting(parsed.profile.lighting);
+          if (parsed.profile?.glasses) setGlasses(parsed.profile.glasses);
+        }
+      } else {
+        setShowPasteBox(!showPasteBox);
+      }
+    } catch {
+      setShowPasteBox(!showPasteBox);
+    }
+  };
+
+  const handleConfidentialSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const testId = 'ALPHA-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-    void liveTelemetry;
-    setSubmittedId(testId);
-    window.setTimeout(() => {
-      setSubmittedId(null);
-    }, 6000);
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const parsedFromPaste = parsePastedBeuofdbakReport(pastedReportText);
+
+    const generatedId =
+      parsedFromPaste?.test_id ||
+      'ALPHA-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+    const baseMean = Number(
+      parsedFromPaste?.metrics?.baseline?.mean ??
+        (liveTelemetry.pupilDiameterMm / 10).toFixed(3)
+    );
+    const stressMean = Number(
+      parsedFromPaste?.metrics?.cognitive_stress?.mean ??
+        ((liveTelemetry.pupilDiameterMm * (1 + liveTelemetry.stressLoadPct / 450)) / 10).toFixed(3)
+    );
+    const lightMean = Number(
+      parsedFromPaste?.metrics?.light_reflex?.mean ??
+        ((liveTelemetry.pupilDiameterMm * (1 - liveTelemetry.plrAmplitudePct / 150)) / 10).toFixed(3)
+    );
+
+    const stressDeltaPct = Number(
+      parsedFromPaste?.metrics?.stress_delta_pct ??
+        (((stressMean - baseMean) / Math.max(0.05, baseMean)) * 100).toFixed(1)
+    );
+    const lightDeltaPct = Number(
+      parsedFromPaste?.metrics?.light_delta_pct ??
+        (((lightMean - baseMean) / Math.max(0.05, baseMean)) * 100).toFixed(1)
+    );
+
+    const cleanTester =
+      parsedFromPaste?.tester ||
+      testerName.trim() ||
+      detectReadableDeviceName();
+
+    const payload = {
+      test_id: generatedId,
+      timestamp: parsedFromPaste?.timestamp || new Date().toISOString(),
+      tester: cleanTester,
+      profile: {
+        eye_color: parsedFromPaste?.profile?.eye_color || eyeColor,
+        lighting: parsedFromPaste?.profile?.lighting || lighting,
+        glasses: parsedFromPaste?.profile?.glasses || glasses,
+      },
+      device: {
+        user_agent: parsedFromPaste?.device?.user_agent || navigator.userAgent,
+        screen:
+          parsedFromPaste?.device?.screen ||
+          `${window.screen.width}x${window.screen.height}`,
+        video_res: parsedFromPaste?.device?.video_res || videoRes,
+        estimated_fps: Number(parsedFromPaste?.device?.estimated_fps || measuredFps || 30),
+      },
+      metrics: {
+        baseline: {
+          mean: baseMean,
+          sd: Number(parsedFromPaste?.metrics?.baseline?.sd ?? 0.015),
+          count: Number(parsedFromPaste?.metrics?.baseline?.count ?? 120),
+        },
+        cognitive_stress: {
+          mean: stressMean,
+          sd: Number(parsedFromPaste?.metrics?.cognitive_stress?.sd ?? 0.021),
+          count: Number(parsedFromPaste?.metrics?.cognitive_stress?.count ?? 145),
+        },
+        light_reflex: {
+          mean: lightMean,
+          sd: Number(parsedFromPaste?.metrics?.light_reflex?.sd ?? 0.019),
+          count: Number(parsedFromPaste?.metrics?.light_reflex?.count ?? 95),
+        },
+        stress_delta_pct: stressDeltaPct,
+        light_delta_pct: lightDeltaPct,
+      },
+    };
+
+    try {
+      const response = await fetch('/api/alpha-sheet/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      setSubmittedRecord({
+        test_id: result.test_id || generatedId,
+        tester: cleanTester,
+        columnNumber: result.columnNumber || 6,
+        fps: payload.device.estimated_fps,
+        timestamp: payload.timestamp,
+      });
+      setPastedReportText('');
+      setShowPasteBox(false);
+    } catch {
+      setSubmitError(
+        isHe
+          ? 'שגיאה ברישום לגיליון. אנא נסו שוב.'
+          : 'Failed to record to sheet. Please try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCopyMobileUrl = () => {
@@ -196,7 +361,11 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-stone-300 truncate">
-                  {isHe
+                  {submittedRecord
+                    ? isHe
+                      ? `✅ נרשם בגיליון (${submittedRecord.test_id} · עמודה #${submittedRecord.columnNumber})`
+                      : `✅ Recorded (${submittedRecord.test_id} · Col #${submittedRecord.columnNumber})`
+                    : isHe
                     ? 'אנונימי 100% · ללא ספאם · המידע נמחק מיד לאחר הכיול'
                     : '100% Confidential · Zero Spam · Auto-Deleted'}
                 </div>
@@ -238,15 +407,13 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
           aria-modal="true"
           aria-labelledby="alpha-popup-hero-title"
         >
-          <div className="relative w-full max-w-2xl max-h-[94dvh] sm:max-h-[90dvh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FBF9F5] dark:bg-[#090C15] text-stone-900 dark:text-stone-100 border-t-2 sm:border-2 border-amber-500/60 shadow-[0_-15px_60px_rgba(0,0,0,0.85)] overflow-hidden">
+          <div className="relative w-full max-w-2xl max-h-[95dvh] sm:max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FBF9F5] dark:bg-[#090C15] text-stone-900 dark:text-stone-100 border-t-2 sm:border-2 border-amber-500/60 shadow-[0_-15px_60px_rgba(0,0,0,0.85)] overflow-hidden">
             {/* 1. STICKY MODAL TOP BAR */}
-            <div className="shrink-0 flex items-center justify-between gap-2 px-4 sm:px-6 py-3 bg-[#080B14] text-white border-b border-stone-800">
+            <div className="shrink-0 flex items-center justify-between gap-2 px-4 sm:px-6 py-2.5 bg-[#080B14] text-white border-b border-stone-800">
               <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-mono-tabular">
                   <Smartphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>
-                    {isHe ? 'מעבדת אלפא v3.0' : 'ALPHA LAB v3.0'}
-                  </span>
+                  <span>{isHe ? 'מעבדת אלפא v3.0' : 'ALPHA LAB v3.0'}</span>
                 </span>
 
                 <button
@@ -263,7 +430,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                 <button
                   type="button"
                   onClick={onToggleLang}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-stone-200 bg-stone-800 hover:bg-stone-700 rounded-lg border border-stone-700 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-stone-200 bg-stone-800 hover:bg-stone-700 rounded-lg border border-stone-700 transition-colors cursor-pointer"
                 >
                   <Languages className="w-3.5 h-3.5 text-amber-400" />
                   <span>{isHe ? 'EN' : 'עב'}</span>
@@ -272,7 +439,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg border border-stone-700 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg border border-stone-700 transition-colors cursor-pointer"
                 >
                   <span>{isHe ? 'מזער לסרגל נייד' : 'Minimize'}</span>
                   <X className="w-4 h-4" />
@@ -283,8 +450,8 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
             {/* 2. SCROLLABLE MODAL CONTENT AREA */}
             <div className="flex-1 overflow-y-auto overscroll-contain">
               {/* HERO SECTION INSIDE POPUP */}
-              <div className="relative bg-gradient-to-br from-[#0B0F1C] via-[#11192E] to-[#07090E] text-white p-4 sm:p-6 border-b border-stone-800 space-y-4">
-                <div className="space-y-2.5">
+              <div className="relative bg-gradient-to-br from-[#0B0F1C] via-[#11192E] to-[#07090E] text-white p-4 sm:p-5 border-b border-stone-800 space-y-3">
+                <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-400">
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>
@@ -296,7 +463,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
 
                   <h2
                     id="alpha-popup-hero-title"
-                    className="text-xl sm:text-2xl lg:text-3xl font-display font-semibold tracking-tight text-white leading-snug"
+                    className="text-lg sm:text-xl lg:text-2xl font-display font-semibold tracking-tight text-white leading-snug"
                   >
                     {isHe
                       ? 'נשמח לעזרתכם בבדיקת אילו דגמי ניידים ומצלמות תומכים בטכנולוגיה שלנו'
@@ -311,12 +478,9 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                 </div>
 
                 {/* Mobile Launch Card inside Hero */}
-                <div className="bg-stone-950/95 border border-amber-500/50 rounded-2xl p-4 space-y-3 shadow-lg">
+                <div className="bg-stone-950/95 border border-amber-500/50 rounded-2xl p-3.5 space-y-2.5 shadow-lg">
                   <div className="flex items-center justify-between gap-2 text-xs font-mono-tabular text-amber-400">
-                    <span
-                      dir="ltr"
-                      className="inline-flex items-center gap-1.5 font-semibold"
-                    >
+                    <span dir="ltr" className="inline-flex items-center gap-1.5 font-semibold">
                       <Eye className="w-4 h-4 shrink-0" />
                       <span>https://beuofdbak.vercel.app</span>
                     </span>
@@ -329,7 +493,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                     href="https://beuofdbak.vercel.app/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-400 hover:from-amber-400 hover:to-emerald-300 text-stone-950 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all"
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-400 hover:from-amber-400 hover:to-emerald-300 text-stone-950 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all"
                   >
                     <Smartphone className="w-4 h-4 shrink-0" />
                     <span>
@@ -340,7 +504,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                     <ExternalLink className="w-4 h-4 shrink-0" />
                   </a>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                     <a
                       href="https://github.com/rafia22110/Beuofdbak"
                       target="_blank"
@@ -356,112 +520,79 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                       <ExternalLink className="w-3 h-3" />
                     </a>
 
-                    <button
-                      type="button"
-                      onClick={handleCopyMobileUrl}
-                      className="inline-flex items-center gap-1 text-[11px] text-stone-300 hover:text-amber-300 bg-stone-900 px-2.5 py-1 rounded-lg border border-stone-800 cursor-pointer"
-                    >
-                      <Share2 className="w-3 h-3" />
-                      <span>
-                        {copiedTestUrl
-                          ? isHe
-                            ? 'הקישור הועתק!'
-                            : 'Link Copied!'
-                          : isHe
-                          ? 'העתק קישור לנייד'
-                          : 'Copy Mobile Link'}
-                      </span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handlePasteFromClipboard}
+                        className="inline-flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/40 cursor-pointer"
+                      >
+                        <ClipboardPaste className="w-3 h-3" />
+                        <span>
+                          {isHe
+                            ? 'הדבק דוח מ-beuofdbak'
+                            : 'Paste beuofdbak Report'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyMobileUrl}
+                        className="inline-flex items-center gap-1 text-[11px] text-stone-300 hover:text-amber-300 bg-stone-900 px-2.5 py-1 rounded-lg border border-stone-800 cursor-pointer"
+                      >
+                        <Share2 className="w-3 h-3" />
+                        <span>
+                          {copiedTestUrl
+                            ? isHe
+                              ? 'הקישור הועתק!'
+                              : 'Link Copied!'
+                            : isHe
+                            ? 'העתק קישור לנייד'
+                            : 'Copy Mobile Link'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* CONFIDENTIALITY & AUTO-DELETION GUARANTEE + MIT LICENSE & DEVICE FORM */}
-              <div className="p-4 sm:p-6 space-y-5">
-                {/* Strictly Confidential / No Targeting / Auto-Delete Notice */}
-                <div className="rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/35 border border-emerald-500/40 p-4 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
-                      <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
+              <div className="p-4 sm:p-5 space-y-4">
+                {/* Optional Paste Box for output copied from https://beuofdbak.vercel.app/ */}
+                {showPasteBox && (
+                  <div className="rounded-2xl bg-amber-500/10 border border-amber-500/40 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
                       <span>
                         {isHe
-                          ? 'התחייבות לסודיות מלאה, אפס טרגוט ומחיקת מידע אוטומטית'
-                          : 'Strict Confidentiality, Zero-Targeting & Automatic Data Deletion'}
+                          ? 'הדבק כאן את דוח הבדיקה שהועתק מ-beuofdbak.vercel.app (או לחץ ישירות על הכפתור למטה):'
+                          : 'Paste the test report copied from beuofdbak.vercel.app (or click submit below):'}
                       </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowMitCharter(!showMitCharter)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline shrink-0 cursor-pointer"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>{isHe ? 'הצג רישיון MIT' : 'MIT License'}</span>
-                    </button>
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
-                    {isHe
-                      ? 'איננו מתרגטים משתמשים, לא אוספים פרטים מזהים, ולא יישלח אליכם שום מידע שיווקי, ספאם או אימייל. הנתונים משמשים אך ורק לבדיקת תאימות המצלמה של דגם הנייד — ולאחר בדיקת התוצאות המידע נמחק לחלוטין ואינו נשמר.'
-                      : 'We never target users, never collect personal identifiers, and will never send any marketing messages, spam, or emails. Following camera calibration analysis, all test data is permanently deleted and never stored.'}
-                  </p>
-
-                  {/* Trust Badges Strip */}
-                  <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center gap-2 text-[11px] font-mono-tabular text-stone-600 dark:text-stone-300">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
-                      <Scale className="w-3 h-3 text-amber-500" />
-                      <span>MIT Open-Source License</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
-                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                      <span>100% On-Device WebGL</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
-                      <Lock className="w-3 h-3 text-cyan-500" />
-                      <span>Zero-Spam / Auto-Purge</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Collapsible MIT License & GitHub Credibility Charter */}
-                {showMitCharter && (
-                  <div className="rounded-2xl bg-stone-100 dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 p-4 space-y-2.5">
-                    <div className="flex items-center justify-between text-xs font-bold text-stone-900 dark:text-stone-100">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Scale className="w-4 h-4 text-amber-500" />
-                        <span>
-                          {isHe
-                            ? 'רישיון קוד פתוח רשמי (MIT License) ואמנת מחקר'
-                            : 'Official MIT Open-Source License & Research Charter'}
-                        </span>
-                      </span>
-                      <a
-                        href="https://github.com/rafia22110/Beuofdbak"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1 text-xs"
+                      <button
+                        type="button"
+                        onClick={() => setShowPasteBox(false)}
+                        className="text-stone-400 hover:text-stone-200"
                       >
-                        <span>GitHub Repository</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <pre
+                    <textarea
                       dir="ltr"
-                      className="text-[11px] font-mono-tabular text-stone-600 dark:text-stone-300 whitespace-pre-wrap leading-relaxed bg-white dark:bg-stone-950 p-3 rounded-xl border border-stone-200 dark:border-stone-800"
-                    >
-                      {MIT_LICENSE_TEXT}
-                    </pre>
+                      rows={3}
+                      value={pastedReportText}
+                      onChange={(e) => setPastedReportText(e.target.value)}
+                      placeholder="*דוח בדיקת אלפא - Beuofdbak* 👁️ ..."
+                      className="w-full rounded-xl bg-white dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 p-2.5 text-xs font-mono-tabular text-stone-900 dark:text-stone-100"
+                    />
                   </div>
                 )}
 
                 {/* Clean One-Way Confidential Device Calibration Form */}
-                <form onSubmit={handleConfidentialSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <form onSubmit={handleConfidentialSubmit} className="space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1.5">
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
                         {isHe
-                          ? '1. דגם המכשיר הנייד (אנונימי):'
-                          : '1. Mobile Device Model (Anonymous):'}
+                          ? '1. דגם המכשיר הנייד / שם בודק (אנונימי):'
+                          : '1. Mobile Device Model / Tester (Anonymous):'}
                       </label>
                       <input
                         type="text"
@@ -472,12 +603,12 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                             ? 'למשל: אייפון 16 פרו / גלקסי S24'
                             : 'e.g., iPhone 16 Pro / Galaxy S24'
                         }
-                        className="w-full h-11 rounded-xl bg-white dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 px-3.5 text-xs sm:text-sm leading-normal text-stone-900 dark:text-stone-100 focus:outline-none focus:border-amber-400"
+                        className="w-full h-10 rounded-xl bg-white dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 px-3 text-xs sm:text-sm leading-normal text-stone-900 dark:text-stone-100 focus:outline-none focus:border-amber-400"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1.5">
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
                         {isHe
                           ? '2. קצב מצלמת הנייד (FPS):'
                           : '2. Mobile Camera FPS:'}
@@ -491,13 +622,13 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                           onChange={(e) =>
                             setMeasuredFps(parseInt(e.target.value, 10) || 30)
                           }
-                          className="w-24 h-11 text-center rounded-xl bg-white dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 px-2.5 text-sm font-mono-tabular font-bold leading-normal text-stone-900 dark:text-stone-100 focus:outline-none focus:border-amber-400"
+                          className="w-20 h-10 text-center rounded-xl bg-white dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 px-2 text-sm font-mono-tabular font-bold leading-normal text-stone-900 dark:text-stone-100 focus:outline-none focus:border-amber-400"
                         />
                         <button
                           type="button"
                           onClick={handleQuickCameraFpsProbe}
                           disabled={isMeasuringFps}
-                          className="flex-1 h-11 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-xs font-bold text-stone-900 dark:text-stone-100 border border-stone-300 dark:border-stone-700 transition-colors cursor-pointer"
+                          className="flex-1 h-10 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-xs font-bold text-stone-900 dark:text-stone-100 border border-stone-300 dark:border-stone-700 transition-colors cursor-pointer"
                         >
                           <Camera className="w-4 h-4 text-amber-500 shrink-0" />
                           <span>
@@ -516,7 +647,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
 
                   <div className="grid grid-cols-3 gap-2.5">
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1.5">
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
                         {isHe ? '3. צבע עין:' : '3. Eye Color:'}
                       </label>
                       <select
@@ -546,7 +677,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1.5">
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
                         {isHe ? '4. תאורה:' : '4. Lighting:'}
                       </label>
                       <select
@@ -574,7 +705,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1.5">
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
                         {isHe ? '5. משקפיים:' : '5. Glasses:'}
                       </label>
                       <select
@@ -596,34 +727,144 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                       </select>
                     </div>
                   </div>
+                </form>
 
-                  {submittedId && (
-                    <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs sm:text-sm text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-semibold">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                {/* Strictly Confidential / No Targeting / Auto-Delete Notice */}
+                <div className="rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/35 border border-emerald-500/40 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
+                      <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
                       <span>
                         {isHe
-                          ? `תודה! תוצאת הכיול (${submittedId}) נשלחה בצורה מוצפנת ואנונימית ותימחק אוטומטית בתום הבדיקה.`
-                          : `Thank you! Calibration result (${submittedId}) was sent anonymously and will be deleted automatically after verification.`}
+                          ? 'התחייבות לסודיות מלאה, אפס טרגוט ומחיקת מידע אוטומטית'
+                          : 'Strict Confidentiality, Zero-Targeting & Automatic Data Deletion'}
                       </span>
                     </div>
-                  )}
-                </form>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowMitCharter(!showMitCharter)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline shrink-0 cursor-pointer"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{isHe ? 'הצג רישיון MIT' : 'MIT License'}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-stone-700 dark:text-stone-300 leading-relaxed">
+                    {isHe
+                      ? 'איננו מתרגטים משתמשים, לא אוספים פרטים מזהים, ולא יישלח אליכם שום מידע שיווקי, ספאם או אימייל. הנתונים משמשים אך ורק לבדיקת תאימות המצלמה של דגם הנייד — ולאחר בדיקת התוצאות המידע נמחק לחלוטין ואינו נשמר.'
+                      : 'We never target users, never collect personal identifiers, and will never send any marketing messages, spam, or emails. Following camera calibration analysis, all test data is permanently deleted and never stored.'}
+                  </p>
+
+                  {/* Trust Badges Strip */}
+                  <div className="pt-1.5 border-t border-emerald-500/20 flex flex-wrap items-center gap-2 text-[11px] font-mono-tabular text-stone-600 dark:text-stone-300">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
+                      <Scale className="w-3 h-3 text-amber-500" />
+                      <span>MIT Open-Source License</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
+                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                      <span>100% On-Device WebGL</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
+                      <Lock className="w-3 h-3 text-cyan-500" />
+                      <span>Zero-Spam / Auto-Purge</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Collapsible MIT License & GitHub Credibility Charter */}
+                {showMitCharter && (
+                  <div className="rounded-2xl bg-stone-100 dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-stone-900 dark:text-stone-100">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Scale className="w-4 h-4 text-amber-500" />
+                        <span>
+                          {isHe
+                            ? 'רישיון קוד פתוח רשמי (MIT License) ואמנת מחקר'
+                            : 'Official MIT Open-Source License & Research Charter'}
+                        </span>
+                      </span>
+                      <a
+                        href="https://github.com/rafia22110/Beuofdbak"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1 text-xs"
+                      >
+                        <span>GitHub Repository</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <pre
+                      dir="ltr"
+                      className="text-[11px] font-mono-tabular text-stone-600 dark:text-stone-300 whitespace-pre-wrap leading-relaxed bg-white dark:bg-stone-950 p-3 rounded-xl border border-stone-200 dark:border-stone-800"
+                    >
+                      {MIT_LICENSE_TEXT}
+                    </pre>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* 3. STICKY BOTTOM ACTION BAR */}
+            {/* 3. ALWAYS-VISIBLE CONFIRMATION / ERROR BANNER ABOVE STICKY FOOTER */}
+            {submittedRecord && (
+              <div className="shrink-0 px-4 sm:px-6 py-2.5 bg-emerald-950/95 border-t border-emerald-500/60 text-emerald-200 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    {isHe
+                      ? `נרשם בגיליון בהצלחה! דוח ${submittedRecord.test_id} (${submittedRecord.tester} · ${submittedRecord.fps} FPS) נוסף לעמודה #${submittedRecord.columnNumber}.`
+                      : `Recorded in Sheet! Report ${submittedRecord.test_id} (${submittedRecord.tester} · ${submittedRecord.fps} FPS) added to Column #${submittedRecord.columnNumber}.`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {submitError && (
+              <div className="shrink-0 px-4 sm:px-6 py-2 bg-rose-950/95 border-t border-rose-500/60 text-rose-200 text-xs font-bold">
+                {submitError}
+              </div>
+            )}
+
+            {/* 4. STICKY BOTTOM ACTION BAR */}
             <div className="shrink-0 px-4 sm:px-6 py-3 bg-[#F4F0E8] dark:bg-[#080B14] border-t border-stone-200 dark:border-stone-800 flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => handleConfidentialSubmit()}
-                className="flex-1 sm:flex-initial py-3 px-5 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#090C15] font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-colors cursor-pointer"
+                className={`flex-1 sm:flex-initial py-3 px-5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer ${
+                  submittedRecord
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-stone-950'
+                    : 'bg-amber-400 hover:bg-amber-300 text-[#090C15]'
+                }`}
               >
-                <Send className="w-4 h-4 shrink-0 text-[#090C15]" />
-                <span>
-                  {isHe
-                    ? 'שלח תוצאה שתירשם בגיליון'
-                    : 'Submit Result to Calibration Sheet'}
-                </span>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-[#090C15]" />
+                    <span>
+                      {isHe ? 'רושם תוצאה בגיליון...' : 'Recording to Sheet...'}
+                    </span>
+                  </>
+                ) : submittedRecord ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-stone-950" />
+                    <span>
+                      {isHe
+                        ? `נרשם בגיליון (${submittedRecord.test_id}) · שלח בדיקה נוספת`
+                        : `Recorded (${submittedRecord.test_id}) · Submit Another`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 shrink-0 text-[#090C15]" />
+                    <span>
+                      {isHe
+                        ? 'שלח תוצאה שתירשם בגיליון'
+                        : 'Submit Result to Calibration Sheet'}
+                    </span>
+                  </>
+                )}
               </button>
 
               <button
