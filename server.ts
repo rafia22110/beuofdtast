@@ -13,8 +13,9 @@ const SHEET_CSV_PATH = path.resolve(
 );
 const BACKUP_CSV_PATH = path.resolve(__dirname, 'public/alpha_calibration_sheet.csv');
 const JSON_LOG_PATH = path.resolve(__dirname, 'alpha_submissions.json');
+const WEBHOOK_CONFIG_PATH = path.resolve(__dirname, 'alpha_webhook_config.json');
 
-interface AlphaSubmissionPayload {
+export interface AlphaSubmissionPayload {
   test_id: string;
   timestamp: string;
   tester: string;
@@ -46,6 +47,116 @@ function escapeCsvCell(val: string): string {
 }
 
 /**
+ * Parses a single CSV line into cells, respecting double-quoted strings and escaped quotes ("")
+ */
+function parseCsvRow(line: string): string[] {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        cells.push(current);
+        current = '';
+      } else if (ch !== '\r') {
+        current += ch;
+      }
+    }
+  }
+  cells.push(current);
+  return cells;
+}
+
+function extractStringVal(cell: string): string {
+  const m = cell.match(/:\s*"([^"]*)"/);
+  return m ? m[1] : cell.split(':')[1]?.replace(/[",]/g, '').trim() || '';
+}
+
+function extractNumberVal(cell: string): number {
+  const m = cell.match(/:\s*(-?\d+(\.\d+)?)/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+/**
+ * Reads all 46 rows of the Beuofdbak sheet and reconstructs each column into a structured record
+ */
+function readSheetColumnsAndMatrix(): {
+  records: (AlphaSubmissionPayload & { columnNumber: number })[];
+  matrix: string[][];
+} {
+  if (!fs.existsSync(SHEET_CSV_PATH)) {
+    return { records: [], matrix: [] };
+  }
+
+  const raw = fs.readFileSync(SHEET_CSV_PATH, 'utf-8');
+  const lines = raw.split(/\r?\n/).slice(0, 46);
+  const matrix = lines.map(parseCsvRow);
+
+  const numCols = Math.max(...matrix.map((r) => r.length), 0);
+  const records: (AlphaSubmissionPayload & { columnNumber: number })[] = [];
+
+  for (let col = 0; col < numCols; col++) {
+    const getCell = (row1Indexed: number) => matrix[row1Indexed - 1]?.[col] ?? '';
+    const testId = extractStringVal(getCell(13));
+    if (!testId) continue;
+
+    records.push({
+      columnNumber: col + 1,
+      test_id: testId,
+      timestamp: extractStringVal(getCell(14)),
+      tester: extractStringVal(getCell(15)),
+      profile: {
+        eye_color: extractStringVal(getCell(17)) || 'brown_dark',
+        lighting: extractStringVal(getCell(18)) || 'indoor_normal',
+        glasses: extractStringVal(getCell(19)) || 'none',
+      },
+      device: {
+        user_agent: extractStringVal(getCell(22)),
+        screen: extractStringVal(getCell(23)),
+        video_res: extractStringVal(getCell(24)),
+        estimated_fps: extractNumberVal(getCell(25)),
+      },
+      metrics: {
+        baseline: {
+          mean: extractNumberVal(getCell(29)),
+          sd: extractNumberVal(getCell(30)),
+          count: extractNumberVal(getCell(31)),
+        },
+        cognitive_stress: {
+          mean: extractNumberVal(getCell(34)),
+          sd: extractNumberVal(getCell(35)),
+          count: extractNumberVal(getCell(36)),
+        },
+        light_reflex: {
+          mean: extractNumberVal(getCell(39)),
+          sd: extractNumberVal(getCell(40)),
+          count: extractNumberVal(getCell(41)),
+        },
+        stress_delta_pct: extractNumberVal(getCell(43)),
+        light_delta_pct: extractNumberVal(getCell(44)),
+      },
+    });
+  }
+
+  return { records, matrix };
+}
+
+/**
  * Builds the exact 46-row column array matching the user's attached Beuofdbak Alpha Sheet
  */
 function buildFortySixRowColumn(data: AlphaSubmissionPayload): string[] {
@@ -62,18 +173,18 @@ function buildFortySixRowColumn(data: AlphaSubmissionPayload): string[] {
     '---', // Row 10
     'JSON:', // Row 11
     '{', // Row 12
-    `"test_id": "${data.test_id}",`, // Row 13
-    `"timestamp": "${data.timestamp}",`, // Row 14
-    `"tester": "${data.tester}",`, // Row 15
+    `test_id: "${data.test_id}",`, // Row 13
+    `timestamp: "${data.timestamp}",`, // Row 14
+    `tester: "${data.tester}",`, // Row 15
     'profile: {', // Row 16
-    `"eye_color": "${data.profile.eye_color}",`, // Row 17
-    `"lighting": "${data.profile.lighting}",`, // Row 18
-    `"glasses": "${data.profile.glasses}"`, // Row 19
+    `eye_color: "${data.profile.eye_color}",`, // Row 17
+    `lighting: "${data.profile.lighting}",`, // Row 18
+    `glasses: "${data.profile.glasses}"`, // Row 19
     '},', // Row 20
     'device: {', // Row 21
-    `"user_agent": "${data.device.user_agent}",`, // Row 22
-    `"screen": "${data.device.screen}",`, // Row 23
-    `"video_res": "${data.device.video_res}",`, // Row 24
+    `user_agent: "${data.device.user_agent}",`, // Row 22
+    `screen: "${data.device.screen}",`, // Row 23
+    `video_res: "${data.device.video_res}",`, // Row 24
     `estimated_fps: ${data.device.estimated_fps}`, // Row 25
     '},', // Row 26
     'metrics: {', // Row 27
@@ -108,7 +219,6 @@ function appendColumnToSheetCsv(payload: AlphaSubmissionPayload): number {
     existingLines = raw.split(/\r?\n/);
   }
 
-  // Ensure we have at least 46 lines
   while (existingLines.length < 46) {
     existingLines.push(',,,,');
   }
@@ -123,10 +233,24 @@ function appendColumnToSheetCsv(payload: AlphaSubmissionPayload): number {
   fs.writeFileSync(SHEET_CSV_PATH, finalCsv, 'utf-8');
   fs.writeFileSync(BACKUP_CSV_PATH, '\uFEFF' + finalCsv, 'utf-8');
 
-  // Count how many columns exist in Row 2
   const row2 = updatedLines[1] || '';
   const colCount = (row2.match(/Beuofdbak/g) || []).length;
   return colCount;
+}
+
+function getConfiguredWebhookUrl(): string {
+  if (process.env.GOOGLE_SHEETS_WEBHOOK_URL) {
+    return process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+  }
+  if (fs.existsSync(WEBHOOK_CONFIG_PATH)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(WEBHOOK_CONFIG_PATH, 'utf-8'));
+      return cfg.webhookUrl || '';
+    } catch {
+      return '';
+    }
+  }
+  return '';
 }
 
 async function startServer() {
@@ -146,7 +270,6 @@ async function startServer() {
 
       const totalColumns = appendColumnToSheetCsv(body);
 
-      // Also keep a structured JSON log internally
       let list: AlphaSubmissionPayload[] = [];
       if (fs.existsSync(JSON_LOG_PATH)) {
         try {
@@ -158,8 +281,8 @@ async function startServer() {
       list.push(body);
       fs.writeFileSync(JSON_LOG_PATH, JSON.stringify(list, null, 2), 'utf-8');
 
-      // Optional forward to Google Sheets Webhook if set in environment
-      const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+      // Forward to Google Sheets Webhook if configured
+      const webhookUrl = getConfiguredWebhookUrl();
       if (webhookUrl) {
         fetch(webhookUrl, {
           method: 'POST',
@@ -177,6 +300,39 @@ async function startServer() {
     } catch (err) {
       console.error('Error appending to Alpha sheet:', err);
       res.status(500).json({ ok: false, error: 'Failed to write to sheet' });
+    }
+  });
+
+  // GET /api/alpha-sheet/records — For the Developer R&D Console (returns all columns + raw 46-row matrix)
+  app.get('/api/alpha-sheet/records', (_req, res) => {
+    try {
+      const { records, matrix } = readSheetColumnsAndMatrix();
+      res.json({
+        ok: true,
+        totalColumns: records.length,
+        records,
+        matrix,
+        webhookUrl: getConfiguredWebhookUrl(),
+      });
+    } catch (err) {
+      console.error('Error reading Alpha sheet records:', err);
+      res.status(500).json({ ok: false, error: 'Failed to read sheet records' });
+    }
+  });
+
+  // POST /api/alpha-sheet/webhook — Save a Google Sheets Apps Script Webhook URL
+  app.post('/api/alpha-sheet/webhook', (req, res) => {
+    try {
+      const { webhookUrl } = req.body as { webhookUrl?: string };
+      fs.writeFileSync(
+        WEBHOOK_CONFIG_PATH,
+        JSON.stringify({ webhookUrl: (webhookUrl || '').trim() }, null, 2),
+        'utf-8'
+      );
+      res.json({ ok: true, webhookUrl: (webhookUrl || '').trim() });
+    } catch (err) {
+      console.error('Error saving webhook URL:', err);
+      res.status(500).json({ ok: false, error: 'Failed to save webhook URL' });
     }
   });
 
@@ -204,7 +360,11 @@ async function startServer() {
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        watch: null,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
