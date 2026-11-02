@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use OculoFlow / Beuofdbak in your research, hardware calibration, or clinical evaluation, please cite it using the metadata below."
+title: "OculoFlow (Beuofdbak): Non-Invasive Smartphone Pupillometry, 3-Way Oculomic Protocol & Closed-Loop Neuro-Biofeedback"
+version: 3.0.0-alpha
+date-released: 2026-11-01
+license: MIT
+repository-code: "https://github.com/rafia22110/Beuofdbak"
+url: "https://beuofdbak.vercel.app/"
+keywords:
+  - oculomics
+  - pupillometry
+  - biofeedback
+  - locus-coeruleus
+  - adhd-biomarkers
+  - computer-vision
+  - on-device-privacy
+  - schema-org-okf
+authors:
+  - family-names: "Beuofdbak Research Group"
+    given-names: "OculoFlow"
+    orcid: "https://github.com/rafia22110"

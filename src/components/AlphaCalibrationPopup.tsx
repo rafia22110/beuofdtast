@@ -15,6 +15,9 @@ import {
   Languages,
   Share2,
   Lock,
+  Scale,
+  BookOpen,
+  Code2,
 } from 'lucide-react';
 
 function detectReadableDeviceName(): string {
@@ -28,6 +31,12 @@ function detectReadableDeviceName(): string {
   if (/Windows/i.test(ua)) return 'אייפון / אנדרואיד (בדיקת תאימות)';
   return 'Smartphone Optical Sensor';
 }
+
+const MIT_LICENSE_TEXT = `MIT License · Copyright (c) 2026 OculoFlow / Beuofdbak Research Group (rafia22110)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.`;
 
 interface AlphaCalibrationPopupProps {
   lang: Language;
@@ -45,6 +54,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
   const isHe = lang === 'he';
 
   const [isOpen, setIsOpen] = useState(false);
+  const [showMitCharter, setShowMitCharter] = useState(false);
 
   // Confidential single-device submission state (no public results exposed)
   const [testerName, setTesterName] = useState(() => detectReadableDeviceName());
@@ -68,7 +78,7 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Re-open if triggered externally from header button
+  // Re-open if triggered externally from header/footer button
   useEffect(() => {
     if (externalOpenTrigger > 0) {
       setIsOpen(true);
@@ -141,7 +151,6 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
   const handleConfidentialSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const testId = 'ALPHA-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-    // Ephemeral one-way transmission — never exposes any table or stored history to users
     void liveTelemetry;
     setSubmittedId(testId);
     window.setTimeout(() => {
@@ -182,14 +191,14 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                   <Smartphone className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">
                     {isHe
-                      ? 'בדיקת התאמת ניידים · מעבדת אלפא'
-                      : 'Mobile Camera Calibration · Alpha Lab'}
+                      ? 'בדיקת התאמת ניידים · קוד פתוח MIT'
+                      : 'Mobile Camera Test · MIT Open Source'}
                   </span>
                 </div>
                 <div className="text-[11px] text-stone-300 truncate">
                   {isHe
-                    ? 'בדיקה אנונימית לחלוטין · המידע נמחק מיד לאחר הכיול'
-                    : '100% Confidential · Data deleted after calibration'}
+                    ? 'אנונימי 100% · ללא ספאם · המידע נמחק מיד לאחר הכיול'
+                    : '100% Confidential · Zero Spam · Auto-Deleted'}
                 </div>
               </div>
             </button>
@@ -232,15 +241,22 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
           <div className="relative w-full max-w-2xl max-h-[94dvh] sm:max-h-[90dvh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FBF9F5] dark:bg-[#090C15] text-stone-900 dark:text-stone-100 border-t-2 sm:border-2 border-amber-500/60 shadow-[0_-15px_60px_rgba(0,0,0,0.85)] overflow-hidden">
             {/* 1. STICKY MODAL TOP BAR */}
             <div className="shrink-0 flex items-center justify-between gap-2 px-4 sm:px-6 py-3 bg-[#080B14] text-white border-b border-stone-800">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-mono-tabular">
                   <Smartphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span>
-                    {isHe
-                      ? 'בדיקת תאימות ניידים · ALPHA v3.0'
-                      : 'MOBILE COMPATIBILITY · ALPHA v3.0'}
+                    {isHe ? 'מעבדת אלפא v3.0' : 'ALPHA LAB v3.0'}
                   </span>
                 </span>
+
+                <button
+                  type="button"
+                  onClick={() => setShowMitCharter(!showMitCharter)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono-tabular transition-colors cursor-pointer"
+                >
+                  <Scale className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span>{isHe ? 'רישיון MIT · קוד פתוח' : 'MIT License · Open Source'}</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
@@ -269,12 +285,12 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
               {/* HERO SECTION INSIDE POPUP */}
               <div className="relative bg-gradient-to-br from-[#0B0F1C] via-[#11192E] to-[#07090E] text-white p-4 sm:p-6 border-b border-stone-800 space-y-4">
                 <div className="space-y-2.5">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-400">
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>
                       {isHe
-                        ? 'האפליקציה בשלבי פיתוח מתקדמים — מותאם למכשירי מובייל'
-                        : 'Advanced Development Stage — Mobile Camera Calibration'}
+                        ? 'פרויקט מחקר בקוד פתוח (MIT License) · מותאם למכשירי מובייל'
+                        : 'MIT Licensed Open-Source Research · Mobile Camera Calibration'}
                     </span>
                   </div>
 
@@ -324,15 +340,21 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                     <ExternalLink className="w-4 h-4 shrink-0" />
                   </a>
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-mono-tabular">
-                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <a
+                      href="https://github.com/rafia22110/Beuofdbak"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[11px] text-stone-300 hover:text-amber-300 font-mono-tabular"
+                    >
+                      <Code2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       <span>
                         {isHe
-                          ? 'בדיקה אנונימית (On-Device)'
-                          : 'Anonymous On-Device Test'}
+                          ? 'מאגר קוד פתוח ב-GitHub (רישיון MIT)'
+                          : 'Verified GitHub Repo (MIT License)'}
                       </span>
-                    </span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
 
                     <button
                       type="button"
@@ -354,24 +376,83 @@ export const AlphaCalibrationPopup: React.FC<AlphaCalibrationPopupProps> = ({
                 </div>
               </div>
 
-              {/* CONFIDENTIALITY & AUTO-DELETION GUARANTEE + DEVICE SUBMISSION FORM */}
+              {/* CONFIDENTIALITY & AUTO-DELETION GUARANTEE + MIT LICENSE & DEVICE FORM */}
               <div className="p-4 sm:p-6 space-y-5">
-                {/* Strictly Confidential / No Targeting / Auto-Delete Notice (Replacing the old public tabs) */}
-                <div className="rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/35 border border-emerald-500/40 p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
-                    <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>
-                      {isHe
-                        ? 'התחייבות לסודיות מלאה, אפס טרגוט ומחיקת מידע אוטומטית'
-                        : 'Strict Confidentiality, Zero-Targeting & Automatic Data Deletion'}
-                    </span>
+                {/* Strictly Confidential / No Targeting / Auto-Delete Notice */}
+                <div className="rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/35 border border-emerald-500/40 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
+                      <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>
+                        {isHe
+                          ? 'התחייבות לסודיות מלאה, אפס טרגוט ומחיקת מידע אוטומטית'
+                          : 'Strict Confidentiality, Zero-Targeting & Automatic Data Deletion'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowMitCharter(!showMitCharter)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline shrink-0 cursor-pointer"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{isHe ? 'הצג רישיון MIT' : 'MIT License'}</span>
+                    </button>
                   </div>
+
                   <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
                     {isHe
                       ? 'איננו מתרגטים משתמשים, לא אוספים פרטים מזהים, ולא יישלח אליכם שום מידע שיווקי, ספאם או אימייל. הנתונים משמשים אך ורק לבדיקת תאימות המצלמה של דגם הנייד — ולאחר בדיקת התוצאות המידע נמחק לחלוטין ואינו נשמר.'
                       : 'We never target users, never collect personal identifiers, and will never send any marketing messages, spam, or emails. Following camera calibration analysis, all test data is permanently deleted and never stored.'}
                   </p>
+
+                  {/* Trust Badges Strip */}
+                  <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center gap-2 text-[11px] font-mono-tabular text-stone-600 dark:text-stone-300">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
+                      <Scale className="w-3 h-3 text-amber-500" />
+                      <span>MIT Open-Source License</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
+                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                      <span>100% On-Device WebGL</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/70 dark:bg-stone-900 border border-stone-300 dark:border-stone-700">
+                      <Lock className="w-3 h-3 text-cyan-500" />
+                      <span>Zero-Spam / Auto-Purge</span>
+                    </span>
+                  </div>
                 </div>
+
+                {/* Collapsible MIT License & GitHub Credibility Charter */}
+                {showMitCharter && (
+                  <div className="rounded-2xl bg-stone-100 dark:bg-[#0D121F] border border-stone-300 dark:border-stone-700 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-stone-900 dark:text-stone-100">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Scale className="w-4 h-4 text-amber-500" />
+                        <span>
+                          {isHe
+                            ? 'רישיון קוד פתוח רשמי (MIT License) ואמנת מחקר'
+                            : 'Official MIT Open-Source License & Research Charter'}
+                        </span>
+                      </span>
+                      <a
+                        href="https://github.com/rafia22110/Beuofdbak"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1 text-xs"
+                      >
+                        <span>GitHub Repository</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <pre
+                      dir="ltr"
+                      className="text-[11px] font-mono-tabular text-stone-600 dark:text-stone-300 whitespace-pre-wrap leading-relaxed bg-white dark:bg-stone-950 p-3 rounded-xl border border-stone-200 dark:border-stone-800"
+                    >
+                      {MIT_LICENSE_TEXT}
+                    </pre>
+                  </div>
+                )}
 
                 {/* Clean One-Way Confidential Device Calibration Form */}
                 <form onSubmit={handleConfidentialSubmit} className="space-y-4">

@@ -365,11 +365,16 @@ export default function App() {
             <span className="hidden sm:inline" aria-hidden="true">
               ·
             </span>
-            <span className="hidden sm:inline">
+            <a
+              href="https://github.com/rafia22110/Beuofdbak"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-amber-600 dark:hover:text-amber-400 underline underline-offset-4 transition-colors"
+            >
               {isHe
-                ? 'פרוטוקול אבחון 3-שלבי (מצבים A / B / C)'
-                : '3-WAY PROTOCOL (STATE A / B / C)'}
-            </span>
+                ? 'רישיון קוד פתוח MIT · GitHub Verified'
+                : 'MIT Open-Source License · GitHub Verified'}
+            </a>
           </div>
 
           <div className="flex items-center gap-3">
@@ -1412,19 +1417,27 @@ export default function App() {
       {/* Quiet Clinical Footer */}
       <footer className="border-t border-stone-200 dark:border-stone-800 pt-10 pb-28 sm:pb-12 px-6 lg:px-12 text-xs text-stone-500 dark:text-stone-400">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-display font-semibold text-sm text-stone-900 dark:text-stone-200">
               OculoFlow
             </span>
             <span aria-hidden="true">·</span>
             <span>
               {isHe
-                ? 'פלטפורמת פופילומטריה 3-שלבית ונוירו-אבחון בחוג סגור (2026)'
-                : '3-Way Pupillometry & Closed-Loop Neuro-Diagnostic Platform (2026)'}
+                ? 'פלטפורמת קוד פתוח (רישיון MIT) לפופילומטריה ונוירו-אבחון (2026)'
+                : 'MIT Licensed Open-Source Pupillometry & Neuro-Diagnostic Platform (2026)'}
             </span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-5">
+            <a
+              href="https://github.com/rafia22110/Beuofdbak"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono-tabular text-amber-700 dark:text-amber-400 hover:underline transition-colors"
+            >
+              {isHe ? 'GitHub · רישיון MIT' : 'GitHub · MIT License'}
+            </a>
             <a
               href="#showreel"
               className="hover:text-stone-900 dark:hover:text-stone-200 transition-colors"

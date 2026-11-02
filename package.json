@@ -1,7 +1,14 @@
 {
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
+  "name": "oculoflow-beuofdbak",
+  "private": false,
+  "version": "3.0.0-alpha",
+  "license": "MIT",
+  "description": "OculoFlow (Beuofdbak) — Non-Invasive Smartphone Pupillometry, 3-Way Oculomic Diagnostic Protocol & Closed-Loop Neuro-Biofeedback Platform",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rafia22110/Beuofdbak.git"
+  },
+  "homepage": "https://beuofdbak.vercel.app/",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
