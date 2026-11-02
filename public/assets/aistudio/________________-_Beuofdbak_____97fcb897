@@ -1,0 +1,46 @@
+,,,,
+*דוח בדיקת אלפא - Beuofdbak* 👁️,*דוח בדיקת אלפא - Beuofdbak* 👁️,*דוח בדיקת אלפא - Beuofdbak* 👁️,*דוח בדיקת אלפא - Beuofdbak* 👁️,*דוח בדיקת אלפא - Beuofdbak* 👁️
+נבדק: data.tester({data.test_id}),נבדק: data.tester({data.test_id}),נבדק: data.tester({data.test_id}),נבדק: data.tester({data.test_id}),נבדק: data.tester({data.test_id})
+צבע עין: brown_dark | תאורה: indoor_normal,צבע עין: brown_dark | תאורה: indoor_normal,צבע עין: brown_dark | תאורה: indoor_normal,צבע עין: brown_dark | תאורה: indoor_normal,צבע עין: brown_dark | תאורה: bright_sun
+קצב מצלמה: 27 FPS,קצב מצלמה: 33 FPS,קצב מצלמה: 6 FPS,קצב מצלמה: 4 FPS,קצב מצלמה: 41 FPS
+---,---,---,---,---
+• מנוחה: 0.2277 (SD: 0.003),• מנוחה: 0.2295 (SD: 0.0037),• מנוחה: 0.2187 (SD: 0.0024),• מנוחה: 0.2101 (SD: 0.0047),• מנוחה: 0.2191 (SD: 0.0034)
+• מאמץ קוגניטיבי: data.metrics.cognitivestress.mean({data.metrics.stress_delta_pct}%),• מאמץ קוגניטיבי: data.metrics.cognitivestress.mean({data.metrics.stress_delta_pct}%),• מאמץ קוגניטיבי: data.metrics.cognitivestress.mean({data.metrics.stress_delta_pct}%),• מאמץ קוגניטיבי: data.metrics.cognitivestress.mean({data.metrics.stress_delta_pct}%),• מאמץ קוגניטיבי: data.metrics.cognitivestress.mean({data.metrics.stress_delta_pct}%)
+• רפלקס אור: data.metrics.lightreflex.mean({data.metrics.light_delta_pct}%),• רפלקס אור: data.metrics.lightreflex.mean({data.metrics.light_delta_pct}%),• רפלקס אור: data.metrics.lightreflex.mean({data.metrics.light_delta_pct}%),• רפלקס אור: data.metrics.lightreflex.mean({data.metrics.light_delta_pct}%),• רפלקס אור: data.metrics.lightreflex.mean({data.metrics.light_delta_pct}%)
+---,---,---,---,---
+JSON:,JSON:,JSON:,JSON:,JSON:
+{,{,{,{,{
+"test_id: ""ALPHA-OKUI9"",","test_id: ""ALPHA-35JM9"",","test_id: ""ALPHA-5QHIO"",","test_id: ""ALPHA-5FUYB"",","test_id: ""ALPHA-276X5"","
+"timestamp: ""2026-10-20T06:12:30.589Z"",","timestamp: ""2026-10-25T09:59:26.513Z"",","timestamp: ""2026-10-25T10:10:51.453Z"",","timestamp: ""2026-10-25T12:33:45.177Z"",","timestamp: ""2026-10-25T07:56:10.035Z"","
+"tester: ""גל אייפון 13"",","tester: ""אייפון 16 פרו מקס"",","tester: ""Anonymous"",","tester: ""Anonymous"",","tester: ""עתלנה"","
+profile: {,profile: {,profile: {,profile: {,profile: {
+"eye_color: ""brown_dark"",","eye_color: ""brown_dark"",","eye_color: ""brown_dark"",","eye_color: ""brown_dark"",","eye_color: ""brown_dark"","
+"lighting: ""indoor_normal"",","lighting: ""indoor_normal"",","lighting: ""indoor_normal"",","lighting: ""indoor_normal"",","lighting: ""bright_sun"","
+"glasses: ""none""","glasses: ""none""","glasses: ""none""","glasses: ""none""","glasses: ""none"""
+"},","},","},","},","},"
+device: {,device: {,device: {,device: {,device: {
+"user_agent: ""Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1"",","user_agent: ""Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1"",","user_agent: ""Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/30.0 Chrome/143.0.0.0 Mobile Safari/537.36"",","user_agent: ""Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/30.0 Chrome/143.0.0.0 Mobile Safari/537.36"",","user_agent: ""Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/604.1"","
+"screen: ""window.screen.widthx{window.screen.height}"",","screen: ""window.screen.widthx{window.screen.height}"",","screen: ""window.screen.widthx{window.screen.height}"",","screen: ""window.screen.widthx{window.screen.height}"",","screen: ""window.screen.widthx{window.screen.height}"","
+"video_res: ""canvas.widthx{canvas.height}"",","video_res: ""canvas.widthx{canvas.height}"",","video_res: ""canvas.widthx{canvas.height}"",","video_res: ""canvas.widthx{canvas.height}"",","video_res: ""canvas.widthx{canvas.height}"","
+estimated_fps: 27,estimated_fps: 33,estimated_fps: 6,estimated_fps: 4,estimated_fps: 41
+"},","},","},","},","},"
+metrics: {,metrics: {,metrics: {,metrics: {,metrics: {
+baseline: {,baseline: {,baseline: {,baseline: {,baseline: {
+"mean: 0.2277,","mean: 0.2295,","mean: 0.2187,","mean: 0.2101,","mean: 0.2191,"
+"sd: 0.003,","sd: 0.0037,","sd: 0.0024,","sd: 0.0047,","sd: 0.0034,"
+count: 414,count: 726,count: 80,count: 54,count: 603
+"},","},","},","},","},"
+cognitive_stress: {,cognitive_stress: {,cognitive_stress: {,cognitive_stress: {,cognitive_stress: {
+"mean: 0.2281,","mean: 0.2296,","mean: 0.2153,","mean: 0.2106,","mean: 0.2179,"
+"sd: 0.0141,","sd: 0.0054,","sd: 0.0053,","sd: 0.003,","sd: 0.0035,"
+count: 575,count: 848,count: 118,count: 82,count: 891
+"},","},","},","},","},"
+light_reflex: {,light_reflex: {,light_reflex: {,light_reflex: {,light_reflex: {
+"mean: 0.2275,","mean: 0.2314,","mean: 0.2145,","mean: 0.2092,","mean: 0.2194,"
+"sd: 0.0047,","sd: 0.0128,","sd: 0.005,","sd: 0.004,","sd: 0.0046,"
+count: 432,count: 545,count: 85,count: 64,count: 635
+"},","},","},","},","},"
+"stress_delta_pct: 0.2,","stress_delta_pct: 0,","stress_delta_pct: -1.6,","stress_delta_pct: 0.2,","stress_delta_pct: -0.5,"
+light_delta_pct: -0.1,light_delta_pct: 0.8,light_delta_pct: -1.9,light_delta_pct: -0.4,light_delta_pct: 0.1
+},},},},}
+},},},},}

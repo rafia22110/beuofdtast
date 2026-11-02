@@ -1,0 +1,6 @@
+{
+  "name": "Chrono·Oculus — 2026 Surrealist Horology Monograph",
+  "description": "Interactive surrealist horology exhibition, optical illusion studio, and 2026 visual monograph exploring time, ocular mechanics, and temporal motion.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
